@@ -3,6 +3,14 @@ var csv = require("csv-parser");
 var fs = require("fs");
 var path = require("path");
 const chalk = require("chalk");
+var moment = require("moment");
+
+const monthsToAdd = 6;
+
+const readline = require("readline").createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
 
 let csvIndex = [];
 let csvIndexCounter = 0;
@@ -49,8 +57,22 @@ const getCsv = async (filePath) => {
   });
 };
 
-const main = async (filePath) => {
+const main = async (filePath, option) => {
+
   let reader = await parquet.ParquetReader.openFile(filePath);
+
+  if(option == 1){
+    const pathArr = filePath.split("/");
+    const folderName = pathArr.find((p) => p.includes("date"));
+    const fileName = pathArr.find((p) => p.includes("_0"));
+    const convertedFolderName = convertFolderName(folderName);
+    const convertedFileName = convertFileName(fileName);
+  
+    filePath = filePath
+      .replace(folderName, convertedFolderName)
+      .replace(fileName, convertedFileName);
+  }
+
 
   try {
     let writer = await parquet.ParquetWriter.openFile(scheme, `_${filePath}`);
@@ -63,20 +85,29 @@ const main = async (filePath) => {
 
     while ((record = await cursor.next())) {
       Object.keys(record).forEach((key) => {
-        if (csvIndex[csvIndexCounter].hasOwnProperty(key)) {
-          record[key] = csvIndex[csvIndexCounter][key];
-          // Testing:
-          // console.log(`CSV Index is: ${csvIndexCounter}`);
-          // console.log(
-          //   `${filePath} - Change ${record[key]} to ${csvIndex[csvIndexCounter][key]}`
-          // );
+        if (option == 1) {
+          if (record.hasOwnProperty("timestamp") && key == "timestamp") {
+            record[key] = moment(record.timestamp)
+              .add(182, "days")
+              .format("YYYY-MM-DD HH:mm:ss.SSS")
+              .toString();
+          }
+        } else if (option == 2) {
+          if (csvIndex[csvIndexCounter].hasOwnProperty(key)) {
+            
+            record[key] = csvIndex[csvIndexCounter][key];
+            // Testing:
+            // console.log(`CSV Index is: ${csvIndexCounter}`);
+            // console.log(
+            //   `${filePath} - Change ${record[key]} to ${csvIndex[csvIndexCounter][key]}`
+            // );
+          }
         }
       });
 
       // if csv list is ended then reset index to 0.
       csvIndexCounter =
-        csvIndexCounter >= csvIndex.length - 1 ? 0 : csvIndexCounter + 1;
-
+      csvIndexCounter >= csvIndex.length - 1 ? 0 : csvIndexCounter + 1;
       await writer.appendRow(record);
     }
 
@@ -95,19 +126,61 @@ const makeDir = (dirPath, newDirName) => {
   });
 };
 
-const traverseDir = (dir) => {
+const convertFileName = (fileName) => {
+  if (fileName.length == 17) {
+    return moment(fileName, "YYYYMMDDTHHmmssfff")
+      .add(182, "days")
+      .format("YYYYMMDDTHHmmss_0")
+      .toString();
+  } else if (fileName.length == 64) {
+    const date = fileName.substring(0, 8);
+    const formattedDate = moment(date)
+      .add(182, "days")
+      .format("YYYYMMDD")
+      .toString();
+
+    return fileName.replace(date, formattedDate);
+  } else return fileName;
+};
+
+const convertFolderName = (folderName) => {
+  return `date=${moment(folderName.split("=")[1])
+    .add(182, "days")
+    .format("YYYY-MM-DD")
+    .toString()}`;
+};
+
+const traverseDir = (dir, option) => {
+
   fs.readdirSync(dir).forEach((file) => {
     let fullPath = path.join(dir, file);
 
     if (fs.lstatSync(fullPath).isDirectory()) {
+      const convertedFolderName = option === 1 ? convertFolderName(file) : file;
       const newTag = dir.replace("root", "_root");
-      makeDir(newTag, file);
-      traverseDir(fullPath);
+      makeDir(newTag, convertedFolderName);
+      traverseDir(fullPath, option);
     } else {
       var isHidden = /^\./.test(file);
-      if (!isHidden) main(fullPath);
+      var isTempFile = file.includes("restored");
+      if (!isHidden && !isTempFile) {
+        main(fullPath, option);
+      }
     }
   });
+};
+
+const convertParquet = async (option) => {
+  const csvFile = "./csv/386 index copy.csv";
+  csvIndex = await getCsv(csvFile);
+  
+  makeDir(__dirname, "_root");
+  traverseDir("./root", option);
+};
+
+const shiftDates = (option) => {
+  makeDir(__dirname, "_root");
+  traverseDir("./root", option);
 };
 
 (async () => {
@@ -117,11 +190,11 @@ const traverseDir = (dir) => {
   /* 4. Run node index.js 
   /* the output will be inside _root folder */
 
-  const root = "./root";
-  const csvFile = "./csv/617.csv";
+  readline.question(`1-shifting dates\n2-converting-parquet\n`, (opt) => {
 
-  csvIndex = await getCsv(csvFile);
+    if (opt == 2) convertParquet(opt);
+    else if (opt == 1) shiftDates(opt);
 
-  makeDir(__dirname, "_root");
-  traverseDir(root, csvFile);
+    readline.close();
+  });
 })();

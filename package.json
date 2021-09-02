@@ -1,0 +1,27 @@
+{
+  "name": "util",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "csv-parser": "^3.0.0",
+    "moment": "^2.29.1",
+    "parquetjs-lite": "^0.8.7"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/galhrn/util.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/galhrn/util/issues"
+  },
+  "homepage": "https://github.com/galhrn/util#readme"
+}
